@@ -23,11 +23,14 @@ export function round2(n: number): number {
 
 // ─── WALL-TO-WALL ROOM ──────────────────────────────────────
 
+// installType: "none" | "wallToWall" | "doubleStick"
+export type InstallType = "none" | "wallToWall" | "doubleStick";
+
 export interface RoomCalcInput {
   width: number;
   length: number;
   qty: number;
-  installation: boolean;
+  installType: InstallType;  // replaces old boolean "installation"
   ripUp: boolean;
   pad: boolean;
   receiveDelivery: boolean;
@@ -36,7 +39,7 @@ export interface RoomCalcInput {
 export interface RoomCalcResult {
   sqFt: number;
   sqYd: number;
-  installTotal: number;
+  installTotal: number;      // wall-to-wall OR double stick total
   ripUpTotal: number;
   padTotal: number;
   receiveDeliveryTotal: number;
@@ -48,13 +51,14 @@ export function calcRoom(input: RoomCalcInput): RoomCalcResult {
   const sqFt = round2(safeNum(input.width) * safeNum(input.length) * qty);
   const sqYd = round2(sqFtToSqYd(sqFt));
 
-  // Each service is per-sqYd × total sqYd for all rooms
-  const installTotal   = input.installation    ? round2(sqYd * PRICING.installation)   : 0;
-  const ripUpTotal     = input.ripUp           ? round2(sqYd * PRICING.ripUp)           : 0;
-  const padTotal       = input.pad             ? round2(sqYd * PRICING.pad40oz)         : 0;
-  // Receive/delivery is a flat fee per room group, not multiplied by qty here
-  // (one shipment regardless of room count — adjust if your workflow differs)
-  const receiveDeliveryTotal = input.receiveDelivery ? PRICING.receiveDelivery : 0;
+  // Installation: wall-to-wall or double stick (mutually exclusive)
+  const installRate =
+    input.installType === "wallToWall"  ? PRICING.installation :
+    input.installType === "doubleStick" ? PRICING.doubleStick  : 0;
+  const installTotal         = round2(sqYd * installRate);
+  const ripUpTotal           = input.ripUp           ? round2(sqYd * PRICING.ripUp)   : 0;
+  const padTotal             = input.pad             ? round2(sqYd * PRICING.pad40oz) : 0;
+  const receiveDeliveryTotal = input.receiveDelivery ? PRICING.receiveDelivery        : 0;
 
   const subtotal = round2(installTotal + ripUpTotal + padTotal + receiveDeliveryTotal);
   return { sqFt, sqYd, installTotal, ripUpTotal, padTotal, receiveDeliveryTotal, subtotal };

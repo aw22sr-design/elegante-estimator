@@ -20,7 +20,7 @@ export function generateQuoteNumber(): string {
   const dd  = String(now.getDate()).padStart(2, "0");
   // Random 4-digit suffix so refreshing doesn't duplicate
   const seq = String(Math.floor(Math.random() * 9000) + 1000);
-  return `EC-${yy}${mm}${dd}-${seq}`;
+  return `CGO-${yy}${mm}${dd}-${seq}`;
 }
 
 /** Format a JS Date as MM/DD/YYYY */
