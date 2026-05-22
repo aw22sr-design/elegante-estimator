@@ -6,9 +6,9 @@
 export const PRICING = {
   // --- Wall-to-Wall Installation ---
   installation: 15.00,       // per square yard (Wall-to-Wall Installation)
-  doubleStick: 15.00,        // per square yard (Double Stick Installation) — edit here to change price
+  doubleStick: 6.50,        // per square yard (Double Stick Installation) — edit here to change price
   ripUp: 5.50,               // per square yard (Rip Up & Disposal of Old Carpet)
-  pad40oz: 8.75,             // per square yard
+  pad40oz: 9.50,             // per square yard
   receiveDelivery: 95.00,    // flat fee
 
   // --- Stairs ---
