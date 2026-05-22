@@ -1,0 +1,450 @@
+"use client";
+import { useState, useCallback } from "react";
+import SectionCard from "./SectionCard";
+import CustomerInfo, { CustomerData } from "./CustomerInfo";
+import QuoteSummary from "./QuoteSummary";
+import {
+  calcRoom, calcStairs, calcRug, calcSeaming, calcExtras, calcTravel,
+  safeNum, RoomCalcInput, StairCalcInput, RugCalcInput, ExtrasCalcInput, TravelCalcInput,
+} from "../lib/calculations";
+import { PRICING } from "../lib/pricing";
+import { generateQuoteNumber, fmt } from "../lib/format";
+import type { FinishingStyle } from "../lib/calculations";
+
+// ─── Small reusable input primitives ──────────────────────────────────────────
+
+function NumInput({ label, value, onChange, suffix, min = 0, step = 1 }: {
+  label: string; value: number | string; onChange: (v: string) => void;
+  suffix?: string; min?: number; step?: number;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</label>
+      <div className="flex items-center gap-1">
+        <input
+          type="number" min={min} step={step}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
+        />
+        {suffix && <span className="text-xs text-slate-400 whitespace-nowrap">{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function CheckBox({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <input
+        type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
+        className="w-4 h-4 accent-navy rounded"
+      />
+      <span className="text-sm text-slate-700">{label}</span>
+    </label>
+  );
+}
+
+function CalcBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-xs">
+      <span className="text-slate-400">{label}: </span>
+      <span className="font-bold text-navy">{value}</span>
+    </div>
+  );
+}
+
+function LineTotal({ label, value }: { label: string; value: number }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between text-sm border-t border-slate-100 pt-2 mt-2">
+      <span className="text-slate-600">{label}</span>
+      <span className="font-semibold text-navy">{fmt(value)}</span>
+    </div>
+  );
+}
+
+// ─── ROOM ROW ─────────────────────────────────────────────────────────────────
+
+interface RoomRow {
+  id: number;
+  name: string;
+  width: string;
+  length: string;
+  qty: string;
+  installation: boolean;
+  ripUp: boolean;
+  pad: boolean;
+  receiveDelivery: boolean;
+}
+
+function RoomRowEditor({ room, onChange, onRemove }: {
+  room: RoomRow;
+  onChange: (r: RoomRow) => void;
+  onRemove: () => void;
+}) {
+  const set = (key: keyof RoomRow) => (val: string | boolean) => onChange({ ...room, [key]: val });
+  const input: RoomCalcInput = {
+    width: safeNum(room.width), length: safeNum(room.length), qty: safeNum(room.qty) || 1,
+    installation: room.installation, ripUp: room.ripUp, pad: room.pad, receiveDelivery: room.receiveDelivery,
+  };
+  const calc = calcRoom(input);
+
+  return (
+    <div className="border border-slate-200 rounded-xl p-4 mb-3 bg-slate-50">
+      <div className="flex items-center justify-between mb-3">
+        <input
+          value={room.name} onChange={e => set("name")(e.target.value)}
+          placeholder="Room name (e.g. Master Bedroom)"
+          className="text-sm font-semibold border-b border-slate-300 bg-transparent focus:outline-none focus:border-navy flex-1 mr-4 py-1"
+        />
+        <button onClick={onRemove} className="text-red-400 hover:text-red-600 text-xs font-bold">✕ Remove</button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <NumInput label="Width (ft)"  value={room.width}  onChange={v => set("width")(v)}  step={0.5} />
+        <NumInput label="Length (ft)" value={room.length} onChange={v => set("length")(v)} step={0.5} />
+        <NumInput label="# Rooms"     value={room.qty}    onChange={v => set("qty")(v)}    min={1} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mb-3">
+        <CheckBox label={`Installation (${PRICING.installation}/SY)`}       checked={room.installation}    onChange={v => set("installation")(v)} />
+        <CheckBox label={`Rip Up & Disposal (${PRICING.ripUp}/SY)`}         checked={room.ripUp}           onChange={v => set("ripUp")(v)} />
+        <CheckBox label={`40 oz Pad (${PRICING.pad40oz}/SY)`}               checked={room.pad}             onChange={v => set("pad")(v)} />
+        <CheckBox label={`Receive & Deliver Goods (${PRICING.receiveDelivery} flat)`} checked={room.receiveDelivery} onChange={v => set("receiveDelivery")(v)} />
+      </div>
+
+      <div className="flex flex-wrap gap-2 mt-3">
+        <CalcBadge label="Sq Ft"  value={`${calc.sqFt}`} />
+        <CalcBadge label="Sq Yd"  value={`${calc.sqYd}`} />
+        {calc.subtotal > 0 && <CalcBadge label="Section Total" value={fmt(calc.subtotal)} />}
+      </div>
+    </div>
+  );
+}
+
+// ─── CUSTOM LINE ITEM ─────────────────────────────────────────────────────────
+
+interface CustomLineItem {
+  id: number;
+  description: string;
+  qty: string;
+  unitPrice: string;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN FORM COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export default function EstimatorForm() {
+  // ── Customer info ──────────────────────────────────────────
+  const [customer, setCustomer] = useState<CustomerData>({
+    name: "", projectName: "", address: "", email: "", phone: "", notes: "",
+    quoteNumber: generateQuoteNumber(),
+  });
+
+  // ── Rooms ──────────────────────────────────────────────────
+  const [rooms, setRooms] = useState<RoomRow[]>([
+    { id: 1, name: "", width: "", length: "", qty: "1", installation: true, ripUp: false, pad: false, receiveDelivery: false },
+  ]);
+  const addRoom = () => setRooms(prev => [...prev, {
+    id: Date.now(), name: "", width: "", length: "", qty: "1",
+    installation: true, ripUp: false, pad: false, receiveDelivery: false,
+  }]);
+  const removeRoom = (id: number) => setRooms(prev => prev.filter(r => r.id !== id));
+  const updateRoom = (id: number, r: RoomRow) => setRooms(prev => prev.map(x => x.id === id ? r : x));
+
+  // ── Stairs ─────────────────────────────────────────────────
+  const [stairs, setStairs] = useState<StairCalcInput>({
+    regularSteps: 0, landings: 0, pieSteps: 0, receiveDelivery: false, pad: false, padSqYd: 0,
+  });
+  const setStair = (key: keyof StairCalcInput) => (val: string | boolean) =>
+    setStairs(prev => ({ ...prev, [key]: val }));
+
+  // ── Rug ────────────────────────────────────────────────────
+  const [rug, setRug] = useState<RugCalcInput>({
+    width: 0, length: 0, finishingStyle: "serging",
+    miters: false, miterCount: 0,
+    handSewing: false, handSewingLF: 0,
+    receiveFabricate: false, receiveInspect: false, wrapShip: false,
+    nonSkidPad: false, delivery: false, customOversizePrice: 0,
+  });
+  const setRugVal = (key: keyof RugCalcInput) => (val: string | boolean | number) =>
+    setRug(prev => ({ ...prev, [key]: val }));
+
+  // ── Seaming ────────────────────────────────────────────────
+  const [seamingLF, setSeamingLF] = useState("");
+
+  // ── Extras ─────────────────────────────────────────────────
+  const [extras, setExtras] = useState<ExtrasCalcInput>({
+    furnitureRooms: 0, beds: 0, tacklessBoxes: 0, tacklessPricePerBox: PRICING.tacklessDefault,
+  });
+  const setExtra = (key: keyof ExtrasCalcInput) => (val: string) =>
+    setExtras(prev => ({ ...prev, [key]: safeNum(val) }));
+
+  // ── Custom line items ──────────────────────────────────────
+  const [customItems, setCustomItems] = useState<CustomLineItem[]>([]);
+  const addCustomItem = () => setCustomItems(prev => [...prev, { id: Date.now(), description: "", qty: "1", unitPrice: "" }]);
+  const removeCustomItem = (id: number) => setCustomItems(prev => prev.filter(x => x.id !== id));
+  const updateCustomItem = (id: number, key: keyof CustomLineItem, val: string) =>
+    setCustomItems(prev => prev.map(x => x.id === id ? { ...x, [key]: val } : x));
+
+  // ── Travel ─────────────────────────────────────────────────
+  const [travel, setTravel] = useState<TravelCalcInput>({ miles: 0, roundTrip: false, manualOverride: 0 });
+  const setTravelVal = (key: keyof TravelCalcInput) => (val: string | boolean) =>
+    setTravel(prev => ({ ...prev, [key]: val }));
+
+  // ── Computed values ────────────────────────────────────────
+  const roomCalcs  = rooms.map(r => calcRoom({
+    width: safeNum(r.width), length: safeNum(r.length), qty: safeNum(r.qty) || 1,
+    installation: r.installation, ripUp: r.ripUp, pad: r.pad, receiveDelivery: r.receiveDelivery,
+  }));
+  const stairCalc  = calcStairs(stairs);
+  const rugCalc    = calcRug(rug);
+  const seamTotal  = calcSeaming(safeNum(seamingLF));
+  const extraCalc  = calcExtras(extras);
+  const travelTotal = calcTravel(travel);
+  const customTotal = customItems.reduce((sum, item) => sum + safeNum(item.qty) * safeNum(item.unitPrice), 0);
+
+  const roomTotal  = roomCalcs.reduce((sum, c) => sum + c.subtotal, 0);
+  const grandTotal = roomTotal + stairCalc.subtotal + rugCalc.subtotal + seamTotal + extraCalc.subtotal + travelTotal + customTotal;
+
+  // ── Reset ──────────────────────────────────────────────────
+  const resetForm = useCallback(() => {
+    if (!confirm("Reset everything? This cannot be undone.")) return;
+    setCustomer({ name: "", projectName: "", address: "", email: "", phone: "", notes: "", quoteNumber: generateQuoteNumber() });
+    setRooms([{ id: 1, name: "", width: "", length: "", qty: "1", installation: true, ripUp: false, pad: false, receiveDelivery: false }]);
+    setStairs({ regularSteps: 0, landings: 0, pieSteps: 0, receiveDelivery: false, pad: false, padSqYd: 0 });
+    setRug({ width: 0, length: 0, finishingStyle: "serging", miters: false, miterCount: 0, handSewing: false, handSewingLF: 0, receiveFabricate: false, receiveInspect: false, wrapShip: false, nonSkidPad: false, delivery: false, customOversizePrice: 0 });
+    setSeamingLF("");
+    setExtras({ furnitureRooms: 0, beds: 0, tacklessBoxes: 0, tacklessPricePerBox: PRICING.tacklessDefault });
+    setCustomItems([]);
+    setTravel({ miles: 0, roundTrip: false, manualOverride: 0 });
+  }, []);
+
+  const stairNumInput = (label: string, key: keyof StairCalcInput, suffix?: string) => (
+    <NumInput label={label} value={stairs[key] as number}
+      onChange={v => setStairs(prev => ({ ...prev, [key]: safeNum(v) }))} suffix={suffix} />
+  );
+
+  return (
+    <div className="lg:flex lg:gap-6">
+      {/* ─── LEFT COLUMN: FORM ─── */}
+      <div className="flex-1 min-w-0">
+
+        {/* CUSTOMER INFO */}
+        <SectionCard title="Customer Information" icon="👤">
+          <CustomerInfo data={customer} onChange={setCustomer} />
+        </SectionCard>
+
+        {/* WALL-TO-WALL */}
+        <SectionCard title="Wall-to-Wall Carpet Installation" icon="🏠">
+          {rooms.map((room, i) => (
+            <RoomRowEditor
+              key={room.id} room={room}
+              onChange={r => updateRoom(room.id, r)}
+              onRemove={() => removeRoom(room.id)}
+            />
+          ))}
+          <button onClick={addRoom}
+            className="w-full border-2 border-dashed border-navy/30 rounded-xl py-2 text-navy text-sm font-semibold hover:border-navy/60 hover:bg-navy/5 transition-colors">
+            + Add Room
+          </button>
+          {roomTotal > 0 && (
+            <div className="mt-3 text-right text-sm font-bold text-navy">
+              Section Total: {fmt(roomTotal)}
+            </div>
+          )}
+        </SectionCard>
+
+        {/* STAIRS */}
+        <SectionCard title="Stair Installation" icon="🪜" defaultOpen={false}>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            {stairNumInput("Regular Steps (35 ea)", "regularSteps")}
+            {stairNumInput("Landings (55 ea)", "landings")}
+            {stairNumInput("Pie / Curved Steps (45 ea)", "pieSteps")}
+            {stairNumInput("Pad Sq Yards (for stairs)", "padSqYd", "SY")}
+          </div>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <CheckBox label={`Receive & Deliver Goods (${PRICING.receiveDelivery} flat)`}
+              checked={stairs.receiveDelivery} onChange={v => setStairs(p => ({ ...p, receiveDelivery: v }))} />
+            <CheckBox label={`40 oz Pad (${PRICING.pad40oz}/SY)`}
+              checked={stairs.pad} onChange={v => setStairs(p => ({ ...p, pad: v }))} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {stairCalc.regularTotal > 0 && <CalcBadge label="Regular Steps" value={fmt(stairCalc.regularTotal)} />}
+            {stairCalc.landingTotal > 0 && <CalcBadge label="Landings"      value={fmt(stairCalc.landingTotal)} />}
+            {stairCalc.pieTotal     > 0 && <CalcBadge label="Pie Steps"     value={fmt(stairCalc.pieTotal)} />}
+            {stairCalc.padTotal     > 0 && <CalcBadge label="Pad"           value={fmt(stairCalc.padTotal)} />}
+            {stairCalc.receiveDeliveryTotal > 0 && <CalcBadge label="Receive/Deliver" value={fmt(stairCalc.receiveDeliveryTotal)} />}
+            {stairCalc.subtotal > 0 && <CalcBadge label="Section Total" value={fmt(stairCalc.subtotal)} />}
+          </div>
+        </SectionCard>
+
+        {/* CUSTOM RUG FABRICATION */}
+        <SectionCard title="Custom Rug Fabrication" icon="🪡" defaultOpen={false}>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <NumInput label="Rug Width (ft)"  value={rug.width}  onChange={v => setRugVal("width")(safeNum(v))}  step={0.5} />
+            <NumInput label="Rug Length (ft)" value={rug.length} onChange={v => setRugVal("length")(safeNum(v))} step={0.5} />
+          </div>
+
+          <div className="mb-4 flex flex-col gap-1">
+            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Edge Finishing Style</label>
+            <select
+              value={rug.finishingStyle}
+              onChange={e => setRugVal("finishingStyle")(e.target.value as FinishingStyle)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
+            >
+              <option value="serging">Serging — 6.75/LF</option>
+              <option value="cottonBinding">Cotton Binding 1¼" — 5.50/LF</option>
+              <option value="wideBinding">Wide Binding — 9.50/LF</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <CheckBox label={`Hand-Sewn Miters (${PRICING.handSewnMiter} ea)`} checked={rug.miters} onChange={v => setRugVal("miters")(v)} />
+            {rug.miters && (
+              <NumInput label="Number of Miters" value={rug.miterCount} onChange={v => setRugVal("miterCount")(safeNum(v))} />
+            )}
+            <CheckBox label={`Hand Sewing (${PRICING.handSewing}/LF)`} checked={rug.handSewing} onChange={v => setRugVal("handSewing")(v)} />
+            {rug.handSewing && (
+              <NumInput label="Hand Sewing LF" value={rug.handSewingLF} onChange={v => setRugVal("handSewingLF")(safeNum(v))} suffix="LF" />
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            <CheckBox label="Receive & Fabricate" checked={rug.receiveFabricate} onChange={v => setRugVal("receiveFabricate")(v)} />
+            <CheckBox label="Receive & Inspect"   checked={rug.receiveInspect}   onChange={v => setRugVal("receiveInspect")(v)} />
+            <CheckBox label="Wrap & Ship"          checked={rug.wrapShip}         onChange={v => setRugVal("wrapShip")(v)} />
+            <CheckBox label={`Non-Skid Pad (${PRICING.nonSkidPad}/SY)`} checked={rug.nonSkidPad} onChange={v => setRugVal("nonSkidPad")(v)} />
+            <CheckBox label="Delivery / Spread"    checked={rug.delivery}         onChange={v => setRugVal("delivery")(v)} />
+          </div>
+
+          {/* Rug size info */}
+          {(rug.width > 0 && rug.length > 0) && (
+            <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3 text-xs text-blue-800">
+              {rugCalc.isOversize
+                ? <><strong>⚠ Oversize rug</strong> — no standard size tier applies. Enter a custom price below.</>
+                : <>Size tier: <strong>{rugCalc.tierKey}</strong> · Sq Ft: {rugCalc.sqFt} · Sq Yd: {rugCalc.sqYd} · Perimeter: {rugCalc.linearFt} LF</>
+              }
+            </div>
+          )}
+
+          {rugCalc.isOversize && (
+            <div className="mb-3">
+              <NumInput label="Custom Oversize Price (manual)" value={rug.customOversizePrice} onChange={v => setRugVal("customOversizePrice")(safeNum(v))} />
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            {rugCalc.finishingTotal       > 0 && <CalcBadge label="Edge Finishing"     value={fmt(rugCalc.finishingTotal)} />}
+            {rugCalc.miterTotal           > 0 && <CalcBadge label="Miters"             value={fmt(rugCalc.miterTotal)} />}
+            {rugCalc.handSewingTotal      > 0 && <CalcBadge label="Hand Sewing"        value={fmt(rugCalc.handSewingTotal)} />}
+            {rugCalc.receiveFabricateTotal> 0 && <CalcBadge label="Receive/Fabricate"  value={fmt(rugCalc.receiveFabricateTotal)} />}
+            {rugCalc.receiveInspectTotal  > 0 && <CalcBadge label="Receive/Inspect"    value={fmt(rugCalc.receiveInspectTotal)} />}
+            {rugCalc.wrapShipTotal        > 0 && <CalcBadge label="Wrap & Ship"        value={fmt(rugCalc.wrapShipTotal)} />}
+            {rugCalc.nonSkidPadTotal      > 0 && <CalcBadge label="Non-Skid Pad"       value={fmt(rugCalc.nonSkidPadTotal)} />}
+            {rugCalc.deliveryTotal        > 0 && <CalcBadge label="Delivery"           value={fmt(rugCalc.deliveryTotal)} />}
+            {rugCalc.subtotal             > 0 && <CalcBadge label="Section Total"      value={fmt(rugCalc.subtotal)} />}
+          </div>
+        </SectionCard>
+
+        {/* SEAMING */}
+        <SectionCard title="Seaming" icon="✂️" defaultOpen={false}>
+          <div className="grid grid-cols-2 gap-3">
+            <NumInput label={`Seam Linear Feet (${PRICING.seaming}/LF)`} value={seamingLF} onChange={setSeamingLF} suffix="LF" />
+            {seamTotal > 0 && <CalcBadge label="Seaming Total" value={fmt(seamTotal)} />}
+          </div>
+        </SectionCard>
+
+        {/* EXTRA SERVICES */}
+        <SectionCard title="Extra Services" icon="⚙️" defaultOpen={false}>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <NumInput label={`Furniture Rooms (${PRICING.furnitureHandling}/rm)`} value={extras.furnitureRooms} onChange={setExtra("furnitureRooms")} />
+            <NumInput label={`Bed Disassembly (${PRICING.bedDisassembly}/bed)`}   value={extras.beds}          onChange={setExtra("beds")} />
+            <NumInput label="Tackless / Tack Strip Boxes" value={extras.tacklessBoxes}        onChange={setExtra("tacklessBoxes")} />
+            <NumInput label="Price Per Tackless Box"      value={extras.tacklessPricePerBox}  onChange={setExtra("tacklessPricePerBox")} />
+          </div>
+
+          {/* Custom line items */}
+          <div className="border-t border-slate-100 pt-3">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Custom Line Items</p>
+            {customItems.map(item => (
+              <div key={item.id} className="flex gap-2 mb-2 items-center">
+                <input
+                  value={item.description} onChange={e => updateCustomItem(item.id, "description", e.target.value)}
+                  placeholder="Description"
+                  className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
+                />
+                <input
+                  type="number" min="0" value={item.qty} onChange={e => updateCustomItem(item.id, "qty", e.target.value)}
+                  placeholder="Qty" className="w-16 border border-slate-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
+                />
+                <input
+                  type="number" min="0" value={item.unitPrice} onChange={e => updateCustomItem(item.id, "unitPrice", e.target.value)}
+                  placeholder="Price" className="w-24 border border-slate-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy"
+                />
+                <button onClick={() => removeCustomItem(item.id)} className="text-red-400 hover:text-red-600 font-bold">✕</button>
+              </div>
+            ))}
+            <button onClick={addCustomItem}
+              className="mt-1 border-2 border-dashed border-navy/30 rounded-xl py-2 px-4 text-navy text-sm font-semibold hover:border-navy/60 hover:bg-navy/5 transition-colors">
+              + Add Custom Item
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-3">
+            {extraCalc.furnitureTotal > 0 && <CalcBadge label="Furniture" value={fmt(extraCalc.furnitureTotal)} />}
+            {extraCalc.bedTotal       > 0 && <CalcBadge label="Beds"      value={fmt(extraCalc.bedTotal)} />}
+            {extraCalc.tacklessTotal  > 0 && <CalcBadge label="Tackless"  value={fmt(extraCalc.tacklessTotal)} />}
+            {customTotal              > 0 && <CalcBadge label="Custom"    value={fmt(customTotal)} />}
+            {extraCalc.subtotal + customTotal > 0 && <CalcBadge label="Section Total" value={fmt(extraCalc.subtotal + customTotal)} />}
+          </div>
+        </SectionCard>
+
+        {/* TRAVEL */}
+        <SectionCard title="Travel" icon="🚗" defaultOpen={false}>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <NumInput label="Miles (one way)"      value={travel.miles}          onChange={v => setTravelVal("miles")(v)} />
+            <NumInput label="Manual Override Total" value={travel.manualOverride} onChange={v => setTravelVal("manualOverride")(v)} />
+          </div>
+          <div className="mb-3">
+            <CheckBox label="Round Trip" checked={travel.roundTrip} onChange={v => setTravelVal("roundTrip")(v)} />
+          </div>
+          <p className="text-xs text-slate-400">
+            Formula: 139 base + (miles{travel.roundTrip ? " × 2" : ""} × 1.45)
+            {safeNum(travel.manualOverride) > 0 ? " — Manual override active" : ""}
+          </p>
+          {travelTotal > 0 && <div className="mt-2"><CalcBadge label="Travel Total" value={fmt(travelTotal)} /></div>}
+        </SectionCard>
+
+        {/* RESET BUTTON */}
+        <div className="text-right mt-2 mb-8">
+          <button onClick={resetForm}
+            className="text-sm text-slate-400 hover:text-red-500 underline transition-colors">
+            Reset Form
+          </button>
+        </div>
+      </div>
+
+      {/* ─── RIGHT COLUMN: QUOTE SUMMARY (sticky on desktop) ─── */}
+      <div className="lg:w-96 lg:flex-shrink-0">
+        <QuoteSummary
+          customer={customer}
+          rooms={rooms}
+          roomCalcs={roomCalcs}
+          stairCalc={stairCalc}
+          rugCalc={rugCalc}
+          rug={rug}
+          seamTotal={seamTotal}
+          seamingLF={safeNum(seamingLF)}
+          extraCalc={extraCalc}
+          customItems={customItems}
+          travelTotal={travelTotal}
+          travel={travel}
+          grandTotal={grandTotal}
+        />
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy:      #1a1a2e;
+  --navy-dark: #0f0f1a;
+  --gold:      #b8960c;
+  --gold-lt:   #f5c842;
+}
+
+/* Make custom color classes available via Tailwind's bg/text utilities */
+@layer utilities {
+  .bg-navy       { background-color: var(--navy); }
+  .bg-navy-dark  { background-color: var(--navy-dark); }
+  .bg-gold       { background-color: var(--gold); }
+  .text-navy     { color: var(--navy); }
+  .text-gold     { color: var(--gold-lt); }
+  .border-navy   { border-color: var(--navy); }
+  .ring-navy     { --tw-ring-color: var(--navy); }
+  .accent-navy   { accent-color: var(--navy); }
+}
+
+/* Smooth scrolling everywhere */
+html { scroll-behavior: smooth; }
+
+/* Print: hide buttons */
+@media print {
+  button, header, footer { display: none !important; }
+}
