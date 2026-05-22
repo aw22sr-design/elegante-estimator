@@ -16,18 +16,18 @@ const TERMS = [
   "Additional work not listed in this quote may require a separate charge.",
 ];
 
-interface RoomRow {
-  id: number; name: string; width: string; length: string; qty: string;
+interface CarpetRow {
+  id: number; width: string; length: string;
   installType: "none" | "wallToWall" | "doubleStick";
-  ripUp: boolean; pad: boolean; receiveDelivery: boolean;
+  ripUp: boolean; pad: boolean;
 }
 
 interface CustomLineItem { id: number; description: string; qty: string; unitPrice: string; }
 
 interface Props {
   customer: CustomerData;
-  rooms: RoomRow[];
-  roomCalcs: RoomCalcResult[];
+  carpets: CarpetRow[];
+  carpetCalcs: RoomCalcResult[];
   stairCalc: StairCalcResult;
   rugCalc: RugCalcResult;
   rug: RugCalcInput;
@@ -49,23 +49,22 @@ function buildLineItems(props: Props): LineItem[] {
     items.push({ description, qty, unit, unitPrice, total: fmt(total) });
   };
 
-  // Rooms
-  props.rooms.forEach((room, i) => {
-    const c = props.roomCalcs[i];
-    const name = room.name || `Room ${i + 1}`;
-    if (c.ripUpTotal > 0)           add(`${name} — Rip Up & Disposal of Old Carpet`, fmt(c.sqYd), "SY", fmt(PRICING.ripUp), c.ripUpTotal);
+  // Carpet Installation areas
+  props.carpets.forEach((row, i) => {
+    const c = props.carpetCalcs[i];
+    const name = `Area ${i + 1}`;
+    if (c.ripUpTotal > 0)   add(`${name} — Rip Up & Disposal of Old Carpet`, fmt(c.sqYd), "SY", fmt(PRICING.ripUp), c.ripUpTotal);
     if (c.installTotal > 0) {
-      const label = room.installType === "doubleStick" ? "Double Stick Installation" : "Wall-to-Wall Installation";
-      const rate  = room.installType === "doubleStick" ? PRICING.doubleStick : PRICING.installation;
+      const label = row.installType === "doubleStick" ? "Double Stick Installation" : "Wall-to-Wall Installation";
+      const rate  = row.installType === "doubleStick" ? PRICING.doubleStick : PRICING.installation;
       add(`${name} — ${label}`, fmt(c.sqYd), "SY", fmt(rate), c.installTotal);
     }
-    if (c.padTotal > 0)             add(`${name} — 40 oz Pad`, fmt(c.sqYd), "SY", fmt(PRICING.pad40oz), c.padTotal);
-    if (c.receiveDeliveryTotal > 0) add(`${name} — Receive & Deliver Goods`, "1", "flat", fmt(PRICING.receiveDelivery), c.receiveDeliveryTotal);
+    if (c.padTotal > 0)     add(`${name} — 40 oz Pad`, fmt(c.sqYd), "SY", fmt(PRICING.pad40oz), c.padTotal);
   });
 
   // Stairs
   const sc = props.stairCalc;
-  if (sc.regularTotal > 0)         add("Regular Steps", String(safeNum(props.rooms[0]?.qty) || 1), "ea", fmt(PRICING.regularStep), sc.regularTotal); // uses step count
+  if (sc.regularTotal > 0)         add("Regular Steps", "—", "ea", fmt(PRICING.regularStep), sc.regularTotal);
   if (sc.landingTotal > 0)         add("Landings", "—", "ea", fmt(PRICING.landing), sc.landingTotal);
   if (sc.pieTotal > 0)             add("Pie / Curved Steps", "—", "ea", fmt(PRICING.pieStep), sc.pieTotal);
   if (sc.padTotal > 0)             add("Stair Pad (40 oz)", "—", "SY", fmt(PRICING.pad40oz), sc.padTotal);

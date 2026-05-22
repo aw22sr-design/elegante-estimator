@@ -67,123 +67,98 @@ function LineTotal({ label, value }: { label: string; value: number }) {
 
 // ─── ROOM ROW ─────────────────────────────────────────────────────────────────
 
-interface RoomRow {
+// ─── CARPET INSTALLATION ROW ──────────────────────────────────────────────────
+// Simplified: just width + length, auto-calculates SY, checkbox services
+
+interface CarpetRow {
   id: number;
-  name: string;
   width: string;
   length: string;
-  qty: string;
-  installType: InstallType;  // "none" | "wallToWall" | "doubleStick"
+  installType: InstallType; // "none" | "wallToWall" | "doubleStick"
   ripUp: boolean;
   pad: boolean;
-  receiveDelivery: boolean;
 }
 
-function RoomRowEditor({ room, onChange, onRemove }: {
-  room: RoomRow;
-  onChange: (r: RoomRow) => void;
+function CarpetRowEditor({ row, onChange, onRemove, index }: {
+  row: CarpetRow;
+  onChange: (r: CarpetRow) => void;
   onRemove: () => void;
+  index: number;
 }) {
-  const set = (key: keyof RoomRow) => (val: string | boolean) => onChange({ ...room, [key]: val });
+  const set = (key: keyof CarpetRow) => (val: string | boolean) => onChange({ ...row, [key]: val });
 
-  // Mutually exclusive install type handler
   const handleInstallType = (type: InstallType) => {
-    // Toggle off if already selected; otherwise set it
-    onChange({ ...room, installType: room.installType === type ? "none" : type });
+    onChange({ ...row, installType: row.installType === type ? "none" : type });
   };
 
-  const input: RoomCalcInput = {
-    width: safeNum(room.width), length: safeNum(room.length), qty: safeNum(room.qty) || 1,
-    installType: room.installType, ripUp: room.ripUp, pad: room.pad, receiveDelivery: room.receiveDelivery,
-  };
-  const calc = calcRoom(input);
+  const calc = calcRoom({
+    width: safeNum(row.width), length: safeNum(row.length), qty: 1,
+    installType: row.installType, ripUp: row.ripUp, pad: row.pad, receiveDelivery: false,
+  });
 
   return (
     <div className="border border-slate-200 rounded-xl p-4 mb-3 bg-slate-50">
-      {/* Room name + remove */}
-      <div className="flex items-center justify-between mb-3">
-        <input
-          value={room.name} onChange={e => set("name")(e.target.value)}
-          placeholder="Room name (e.g. Master Bedroom)"
-          className="text-sm font-semibold border-b border-slate-300 bg-transparent focus:outline-none focus:border-navy flex-1 mr-4 py-1"
-        />
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-sm font-bold text-navy">Area {index + 1}</span>
         <button onClick={onRemove} className="text-red-400 hover:text-red-600 text-xs font-bold">✕ Remove</button>
       </div>
 
       {/* Measurements */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <NumInput label="Carpet Width (ft)"  value={room.width}  onChange={v => set("width")(v)}  step={0.5} />
-        <NumInput label="Carpet Length (ft)" value={room.length} onChange={v => set("length")(v)} step={0.5} />
-        <NumInput label="# Rooms"            value={room.qty}    onChange={v => set("qty")(v)}    min={1} />
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <NumInput label="Carpet Width (ft)"  value={row.width}  onChange={v => set("width")(v)}  step={0.5} />
+        <NumInput label="Carpet Length (ft)" value={row.length} onChange={v => set("length")(v)} step={0.5} />
       </div>
 
-      {/* Sq Ft / Sq Yd badges */}
-      <div className="flex gap-2 mb-4">
-        <CalcBadge label="Sq Ft" value={`${calc.sqFt}`} />
-        <CalcBadge label="Sq Yd" value={`${calc.sqYd}`} />
-      </div>
+      {/* Auto-calculated SY */}
+      {calc.sqYd > 0 && (
+        <div className="flex gap-3 mb-4">
+          <CalcBadge label="Sq Ft" value={`${calc.sqFt}`} />
+          <CalcBadge label="Sq Yd" value={`${calc.sqYd}`} />
+        </div>
+      )}
 
-      {/* Service checkboxes */}
-      <div className="space-y-2 mb-3">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Select Services</p>
+      {/* Services */}
+      <div className="space-y-1 mb-3">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Select Services</p>
 
-        {/* Rip Up — can combine with either install type */}
-        <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
-          <input type="checkbox" checked={room.ripUp} onChange={e => set("ripUp")(e.target.checked)}
+        {/* Rip Up */}
+        <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
+          <input type="checkbox" checked={row.ripUp} onChange={e => set("ripUp")(e.target.checked)}
             className="w-4 h-4 accent-navy rounded" />
           <span className="flex-1 text-sm text-slate-700">Rip Up &amp; Disposal of Old Carpet</span>
-          <span className="text-xs font-mono text-navy font-semibold">
-            {calc.sqYd > 0 ? `${fmt(calc.ripUpTotal)}` : `${PRICING.ripUp}/SY`}
+          <span className="text-xs font-mono font-semibold text-navy">
+            {calc.sqYd > 0 && row.ripUp ? fmt(calc.ripUpTotal) : `${PRICING.ripUp}/SY`}
           </span>
         </label>
 
-        {/* Wall-to-Wall — mutually exclusive with Double Stick */}
-        <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
+        {/* Double Stick — no Wall-to-Wall option per new spec */}
+        <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
           <input type="checkbox"
-            checked={room.installType === "wallToWall"}
-            onChange={() => handleInstallType("wallToWall")}
-            className="w-4 h-4 accent-navy rounded" />
-          <span className="flex-1 text-sm text-slate-700">Wall-to-Wall Installation</span>
-          <span className="text-xs font-mono text-navy font-semibold">
-            {calc.sqYd > 0 && room.installType === "wallToWall" ? `${fmt(calc.installTotal)}` : `${PRICING.installation}/SY`}
-          </span>
-        </label>
-
-        {/* Double Stick — mutually exclusive with Wall-to-Wall */}
-        <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
-          <input type="checkbox"
-            checked={room.installType === "doubleStick"}
+            checked={row.installType === "doubleStick"}
             onChange={() => handleInstallType("doubleStick")}
             className="w-4 h-4 accent-navy rounded" />
           <span className="flex-1 text-sm text-slate-700">Double Stick Installation</span>
-          <span className="text-xs font-mono text-navy font-semibold">
-            {calc.sqYd > 0 && room.installType === "doubleStick" ? `${fmt(calc.installTotal)}` : `${PRICING.doubleStick}/SY`}
+          <span className="text-xs font-mono font-semibold text-navy">
+            {calc.sqYd > 0 && row.installType === "doubleStick" ? fmt(calc.installTotal) : `${PRICING.doubleStick}/SY`}
           </span>
         </label>
 
-        {/* 40oz Pad */}
-        <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
-          <input type="checkbox" checked={room.pad} onChange={e => set("pad")(e.target.checked)}
+        {/* 40 oz Pad */}
+        <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
+          <input type="checkbox" checked={row.pad} onChange={e => set("pad")(e.target.checked)}
             className="w-4 h-4 accent-navy rounded" />
           <span className="flex-1 text-sm text-slate-700">40 oz Pad</span>
-          <span className="text-xs font-mono text-navy font-semibold">
-            {calc.sqYd > 0 && room.pad ? `${fmt(calc.padTotal)}` : `${PRICING.pad40oz}/SY`}
+          <span className="text-xs font-mono font-semibold text-navy">
+            {calc.sqYd > 0 && row.pad ? fmt(calc.padTotal) : `${PRICING.pad40oz}/SY`}
           </span>
-        </label>
-
-        {/* Receive & Deliver */}
-        <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
-          <input type="checkbox" checked={room.receiveDelivery} onChange={e => set("receiveDelivery")(e.target.checked)}
-            className="w-4 h-4 accent-navy rounded" />
-          <span className="flex-1 text-sm text-slate-700">Receive &amp; Deliver Goods</span>
-          <span className="text-xs font-mono text-navy font-semibold">{PRICING.receiveDelivery} flat</span>
         </label>
       </div>
 
-      {/* Section subtotal */}
+      {/* Row total */}
       {calc.subtotal > 0 && (
-        <div className="flex justify-between items-center pt-2 border-t border-slate-200 mt-2">
-          <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Room Total</span>
+        <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+          <span className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Area Total</span>
           <span className="text-navy font-bold text-sm">{fmt(calc.subtotal)}</span>
         </div>
       )}
@@ -211,16 +186,14 @@ export default function EstimatorForm() {
     quoteNumber: generateQuoteNumber(),
   });
 
-  // ── Rooms ──────────────────────────────────────────────────
-  const [rooms, setRooms] = useState<RoomRow[]>([
-    { id: 1, name: "", width: "", length: "", qty: "1", installType: "wallToWall", ripUp: false, pad: false, receiveDelivery: false },
-  ]);
-  const addRoom = () => setRooms(prev => [...prev, {
-    id: Date.now(), name: "", width: "", length: "", qty: "1",
-    installType: "wallToWall" as InstallType, ripUp: false, pad: false, receiveDelivery: false,
+  // ── Carpet Installation areas ──────────────────────────────
+  const [carpets, setCarpets] = useState<CarpetRow[]>([]);
+  const addCarpet = () => setCarpets(prev => [...prev, {
+    id: Date.now(), width: "", length: "",
+    installType: "none" as InstallType, ripUp: false, pad: false,
   }]);
-  const removeRoom = (id: number) => setRooms(prev => prev.filter(r => r.id !== id));
-  const updateRoom = (id: number, r: RoomRow) => setRooms(prev => prev.map(x => x.id === id ? r : x));
+  const removeCarpet = (id: number) => setCarpets(prev => prev.filter(r => r.id !== id));
+  const updateCarpet = (id: number, r: CarpetRow) => setCarpets(prev => prev.map(x => x.id === id ? r : x));
 
   // ── Stairs ─────────────────────────────────────────────────
   const [stairs, setStairs] = useState<StairCalcInput>({
@@ -263,9 +236,9 @@ export default function EstimatorForm() {
     setTravel(prev => ({ ...prev, [key]: val }));
 
   // ── Computed values ────────────────────────────────────────
-  const roomCalcs  = rooms.map(r => calcRoom({
-    width: safeNum(r.width), length: safeNum(r.length), qty: safeNum(r.qty) || 1,
-    installType: r.installType, ripUp: r.ripUp, pad: r.pad, receiveDelivery: r.receiveDelivery,
+  const carpetCalcs = carpets.map(r => calcRoom({
+    width: safeNum(r.width), length: safeNum(r.length), qty: 1,
+    installType: r.installType, ripUp: r.ripUp, pad: r.pad, receiveDelivery: false,
   }));
   const stairCalc  = calcStairs(stairs);
   const rugCalc    = calcRug(rug);
@@ -274,14 +247,14 @@ export default function EstimatorForm() {
   const travelTotal = calcTravel(travel);
   const customTotal = customItems.reduce((sum, item) => sum + safeNum(item.qty) * safeNum(item.unitPrice), 0);
 
-  const roomTotal  = roomCalcs.reduce((sum, c) => sum + c.subtotal, 0);
-  const grandTotal = roomTotal + stairCalc.subtotal + rugCalc.subtotal + seamTotal + extraCalc.subtotal + travelTotal + customTotal;
+  const carpetTotal = carpetCalcs.reduce((sum, c) => sum + c.subtotal, 0);
+  const grandTotal = carpetTotal + stairCalc.subtotal + rugCalc.subtotal + seamTotal + extraCalc.subtotal + travelTotal + customTotal;
 
   // ── Reset ──────────────────────────────────────────────────
   const resetForm = useCallback(() => {
     if (!confirm("Reset everything? This cannot be undone.")) return;
     setCustomer({ name: "", projectName: "", address: "", email: "", phone: "", notes: "", quoteNumber: generateQuoteNumber() });
-    setRooms([{ id: 1, name: "", width: "", length: "", qty: "1", installType: "wallToWall", ripUp: false, pad: false, receiveDelivery: false }]);
+    setCarpets([]);
     setStairs({ regularSteps: 0, landings: 0, pieSteps: 0, receiveDelivery: false, pad: false, padSqYd: 0 });
     setRug({ width: 0, length: 0, finishingStyle: "serging", miters: false, miterCount: 0, handSewing: false, handSewingLF: 0, receiveFabricate: false, receiveInspect: false, wrapShip: false, nonSkidPad: false, delivery: false, customOversizePrice: 0 });
     setSeamingLF("");
@@ -305,22 +278,24 @@ export default function EstimatorForm() {
           <CustomerInfo data={customer} onChange={setCustomer} />
         </SectionCard>
 
-        {/* WALL-TO-WALL */}
-        <SectionCard title="Wall-to-Wall Carpet Installation" icon="🏠">
-          {rooms.map((room, i) => (
-            <RoomRowEditor
-              key={room.id} room={room}
-              onChange={r => updateRoom(room.id, r)}
-              onRemove={() => removeRoom(room.id)}
+        {/* CARPET INSTALLATION */}
+        <SectionCard title="Carpet Installation" icon="🏠">
+          {carpets.map((row, i) => (
+            <CarpetRowEditor
+              key={row.id}
+              row={row}
+              index={i}
+              onChange={r => updateCarpet(row.id, r)}
+              onRemove={() => removeCarpet(row.id)}
             />
           ))}
-          <button onClick={addRoom}
+          <button onClick={addCarpet}
             className="w-full border-2 border-dashed border-navy/30 rounded-xl py-2 text-navy text-sm font-semibold hover:border-navy/60 hover:bg-navy/5 transition-colors">
-            + Add Room
+            + Add Area
           </button>
-          {roomTotal > 0 && (
+          {carpetTotal > 0 && (
             <div className="mt-3 text-right text-sm font-bold text-navy">
-              Section Total: {fmt(roomTotal)}
+              Section Total: {fmt(carpetTotal)}
             </div>
           )}
         </SectionCard>
@@ -499,8 +474,8 @@ export default function EstimatorForm() {
       <div className="lg:w-96 lg:flex-shrink-0">
         <QuoteSummary
           customer={customer}
-          rooms={rooms}
-          roomCalcs={roomCalcs}
+          carpets={carpets}
+          carpetCalcs={carpetCalcs}
           stairCalc={stairCalc}
           rugCalc={rugCalc}
           rug={rug}
