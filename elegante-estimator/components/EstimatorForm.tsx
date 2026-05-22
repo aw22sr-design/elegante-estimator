@@ -128,11 +128,11 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
             className="w-4 h-4 accent-navy rounded" />
           <span className="flex-1 text-sm text-slate-700">Rip Up &amp; Disposal of Old Carpet</span>
           <span className="text-xs font-mono font-semibold text-navy">
-            {calc.sqYd > 0 && row.ripUp ? fmt(calc.ripUpTotal) : `${PRICING.ripUp}/SY`}
+            {row.ripUp && calc.sqYd > 0 ? fmt(calc.ripUpTotal) : `${PRICING.ripUp}/SY`}
           </span>
         </label>
 
-        {/* Double Stick — no Wall-to-Wall option per new spec */}
+        {/* Double Stick */}
         <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
           <input type="checkbox"
             checked={row.installType === "doubleStick"}
@@ -140,7 +140,7 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
             className="w-4 h-4 accent-navy rounded" />
           <span className="flex-1 text-sm text-slate-700">Double Stick Installation</span>
           <span className="text-xs font-mono font-semibold text-navy">
-            {calc.sqYd > 0 && row.installType === "doubleStick" ? fmt(calc.installTotal) : `${PRICING.doubleStick}/SY`}
+            {row.installType === "doubleStick" && calc.sqYd > 0 ? fmt(calc.installTotal) : `${PRICING.doubleStick}/SY`}
           </span>
         </label>
 
@@ -150,7 +150,7 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
             className="w-4 h-4 accent-navy rounded" />
           <span className="flex-1 text-sm text-slate-700">40 oz Pad</span>
           <span className="text-xs font-mono font-semibold text-navy">
-            {calc.sqYd > 0 && row.pad ? fmt(calc.padTotal) : `${PRICING.pad40oz}/SY`}
+            {row.pad && calc.sqYd > 0 ? fmt(calc.padTotal) : `${PRICING.pad40oz}/SY`}
           </span>
         </label>
       </div>
