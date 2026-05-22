@@ -18,7 +18,8 @@ const TERMS = [
 
 interface RoomRow {
   id: number; name: string; width: string; length: string; qty: string;
-  installation: boolean; ripUp: boolean; pad: boolean; receiveDelivery: boolean;
+  installType: "none" | "wallToWall" | "doubleStick";
+  ripUp: boolean; pad: boolean; receiveDelivery: boolean;
 }
 
 interface CustomLineItem { id: number; description: string; qty: string; unitPrice: string; }
@@ -52,8 +53,12 @@ function buildLineItems(props: Props): LineItem[] {
   props.rooms.forEach((room, i) => {
     const c = props.roomCalcs[i];
     const name = room.name || `Room ${i + 1}`;
-    if (c.installTotal > 0)         add(`${name} — Installation`, fmt(c.sqYd), "SY", fmt(PRICING.installation), c.installTotal);
-    if (c.ripUpTotal > 0)           add(`${name} — Rip Up & Disposal`, fmt(c.sqYd), "SY", fmt(PRICING.ripUp), c.ripUpTotal);
+    if (c.ripUpTotal > 0)           add(`${name} — Rip Up & Disposal of Old Carpet`, fmt(c.sqYd), "SY", fmt(PRICING.ripUp), c.ripUpTotal);
+    if (c.installTotal > 0) {
+      const label = room.installType === "doubleStick" ? "Double Stick Installation" : "Wall-to-Wall Installation";
+      const rate  = room.installType === "doubleStick" ? PRICING.doubleStick : PRICING.installation;
+      add(`${name} — ${label}`, fmt(c.sqYd), "SY", fmt(rate), c.installTotal);
+    }
     if (c.padTotal > 0)             add(`${name} — 40 oz Pad`, fmt(c.sqYd), "SY", fmt(PRICING.pad40oz), c.padTotal);
     if (c.receiveDeliveryTotal > 0) add(`${name} — Receive & Deliver Goods`, "1", "flat", fmt(PRICING.receiveDelivery), c.receiveDeliveryTotal);
   });
