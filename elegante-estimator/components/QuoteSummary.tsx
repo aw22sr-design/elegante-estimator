@@ -53,12 +53,12 @@ function buildLineItems(props: Props): LineItem[] {
   props.carpets.forEach((row, i) => {
     const c = props.carpetCalcs[i];
     const name = `Area ${i + 1}`;
-    if (c.ripUpTotal > 0)   add(`${name} — Rip Up & Disposal of Old Carpet`, fmt(c.sqYd), "SY", fmt(PRICING.ripUp), c.ripUpTotal);
     if (c.installTotal > 0) {
       const label = row.installType === "doubleStick" ? "Double Stick Installation" : "Wall-to-Wall Installation";
       const rate  = row.installType === "doubleStick" ? PRICING.doubleStick : PRICING.installation;
       add(`${name} — ${label}`, fmt(c.sqYd), "SY", fmt(rate), c.installTotal);
     }
+    if (c.ripUpTotal > 0)   add(`${name} — Rip Up & Disposal of Old Carpet`, fmt(c.sqYd), "SY", fmt(PRICING.ripUp), c.ripUpTotal);
     if (c.padTotal > 0)     add(`${name} — 40 oz Pad`, fmt(c.sqYd), "SY", fmt(PRICING.pad40oz), c.padTotal);
   });
 
