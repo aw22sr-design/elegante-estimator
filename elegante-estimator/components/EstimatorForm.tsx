@@ -122,6 +122,18 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
       <div className="space-y-1 mb-3">
         <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Select Services</p>
 
+        {/* Wall-to-Wall Installation — default selected, mutually exclusive with Double Stick */}
+        <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
+          <input type="checkbox"
+            checked={row.installType === "wallToWall"}
+            onChange={() => handleInstallType("wallToWall")}
+            className="w-4 h-4 accent-navy rounded" />
+          <span className="flex-1 text-sm text-slate-700">Wall-to-Wall Installation</span>
+          <span className="text-xs font-mono font-semibold text-navy">
+            {row.installType === "wallToWall" && calc.sqYd > 0 ? fmt(calc.installTotal) : `${PRICING.installation}/SY`}
+          </span>
+        </label>
+
         {/* Rip Up */}
         <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
           <input type="checkbox" checked={row.ripUp} onChange={e => set("ripUp")(e.target.checked)}
@@ -132,7 +144,7 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
           </span>
         </label>
 
-        {/* Double Stick */}
+        {/* Double Stick — mutually exclusive with Wall-to-Wall */}
         <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
           <input type="checkbox"
             checked={row.installType === "doubleStick"}
@@ -190,7 +202,7 @@ export default function EstimatorForm() {
   const [carpets, setCarpets] = useState<CarpetRow[]>([]);
   const addCarpet = () => setCarpets(prev => [...prev, {
     id: Date.now(), width: "", length: "",
-    installType: "none" as InstallType, ripUp: false, pad: false,
+    installType: "wallToWall" as InstallType, ripUp: false, pad: false,
   }]);
   const removeCarpet = (id: number) => setCarpets(prev => prev.filter(r => r.id !== id));
   const updateCarpet = (id: number, r: CarpetRow) => setCarpets(prev => prev.map(x => x.id === id ? r : x));
