@@ -1,7 +1,7 @@
 "use client";
 import { useRef } from "react";
 import { CustomerData } from "./CustomerInfo";
-import { RoomCalcResult, StairCalcResult, RugCalcResult, ExtrasCalcResult, TravelCalcInput } from "../lib/calculations";
+import { StairCalcResult, RugCalcResult, ExtrasCalcResult, TravelCalcInput } from "../lib/calculations";
 import { RugCalcInput } from "../lib/calculations";
 import { fmt, fmtNum, formatDate } from "../lib/format";
 import { safeNum } from "../lib/calculations";
@@ -18,8 +18,14 @@ const TERMS = [
 
 interface CarpetRow {
   id: number; width: string; length: string;
-  installType: "none" | "wallToWall" | "doubleStick";
-  ripUp: boolean; pad: boolean;
+  doubleStick: boolean; ripUp: boolean; pad: boolean;
+}
+
+// CarpetCalc result shape from calcCarpet() in EstimatorForm
+interface CarpetCalcResult {
+  sqFt: number; sqYd: number; hasArea: boolean;
+  installRate: number; installLabel: string; installTotal: number;
+  ripUpTotal: number; padTotal: number; subtotal: number;
 }
 
 interface CustomLineItem { id: number; description: string; qty: string; unitPrice: string; }
@@ -27,7 +33,7 @@ interface CustomLineItem { id: number; description: string; qty: string; unitPri
 interface Props {
   customer: CustomerData;
   carpets: CarpetRow[];
-  carpetCalcs: RoomCalcResult[];
+  carpetCalcs: CarpetCalcResult[];
   stairCalc: StairCalcResult;
   rugCalc: RugCalcResult;
   rug: RugCalcInput;
@@ -49,17 +55,15 @@ function buildLineItems(props: Props): LineItem[] {
     items.push({ description, qty, unit, unitPrice, total: fmt(total) });
   };
 
-  // Carpet Installation areas
+  // Carpet Installation areas — wall-to-wall is automatic when area > 0
   props.carpets.forEach((row, i) => {
     const c = props.carpetCalcs[i];
+    if (!c.hasArea) return;
     const name = `Area ${i + 1}`;
-    if (c.installTotal > 0) {
-      const label = row.installType === "doubleStick" ? "Double Stick Installation" : "Wall-to-Wall Installation";
-      const rate  = row.installType === "doubleStick" ? PRICING.doubleStick : PRICING.installation;
-      add(`${name} — ${label}`, fmt(c.sqYd), "SY", fmt(rate), c.installTotal);
-    }
-    if (c.ripUpTotal > 0)   add(`${name} — Rip Up & Disposal of Old Carpet`, fmt(c.sqYd), "SY", fmt(PRICING.ripUp), c.ripUpTotal);
-    if (c.padTotal > 0)     add(`${name} — 40 oz Pad`, fmt(c.sqYd), "SY", fmt(PRICING.pad40oz), c.padTotal);
+    // Installation always appears when dimensions are entered
+    add(`${name} — ${c.installLabel}`, fmt(c.sqYd), "SY", fmt(c.installRate), c.installTotal);
+    if (c.ripUpTotal > 0) add(`${name} — Rip Up & Disposal of Old Carpet`, fmt(c.sqYd), "SY", fmt(PRICING.ripUp), c.ripUpTotal);
+    if (c.padTotal > 0)   add(`${name} — 40 oz Pad`, fmt(c.sqYd), "SY", fmt(PRICING.pad40oz), c.padTotal);
   });
 
   // Stairs
