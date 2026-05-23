@@ -238,10 +238,13 @@ export interface TravelCalcInput {
 }
 
 export function calcTravel(input: TravelCalcInput): number {
+  // Manual override takes priority
   if (safeNum(input.manualOverride) > 0) {
     return round2(safeNum(input.manualOverride));
   }
   const miles = safeNum(input.miles);
+  // Only charge travel if miles are actually entered
+  if (miles <= 0) return 0;
   const totalMiles = input.roundTrip ? miles * 2 : miles;
   return round2(PRICING.tripBase + totalMiles * PRICING.tripPerMile);
 }
