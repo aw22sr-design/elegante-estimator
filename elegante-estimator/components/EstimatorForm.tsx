@@ -5,8 +5,7 @@ import CustomerInfo, { CustomerData } from "./CustomerInfo";
 import QuoteSummary from "./QuoteSummary";
 import {
   calcRoom, calcStairs, calcRug, calcSeaming, calcExtras, calcTravel,
-  safeNum, RoomCalcInput, StairCalcInput, RugCalcInput, ExtrasCalcInput, TravelCalcInput,
-  InstallType,
+  safeNum, round2, RoomCalcInput, StairCalcInput, RugCalcInput, ExtrasCalcInput, TravelCalcInput,
 } from "../lib/calculations";
 import { PRICING } from "../lib/pricing";
 import { generateQuoteNumber, fmt } from "../lib/format";
@@ -68,15 +67,33 @@ function LineTotal({ label, value }: { label: string; value: number }) {
 // ─── ROOM ROW ─────────────────────────────────────────────────────────────────
 
 // ─── CARPET INSTALLATION ROW ──────────────────────────────────────────────────
-// Simplified: just width + length, auto-calculates SY, checkbox services
 
 interface CarpetRow {
   id: number;
   width: string;
   length: string;
-  installType: InstallType; // "none" | "wallToWall" | "doubleStick"
+  doubleStick: boolean; // if true, charges doubleStick rate instead of installation rate
   ripUp: boolean;
   pad: boolean;
+}
+
+// Calculate carpet totals. Wall-to-wall is always on when dimensions > 0.
+// Double stick replaces wall-to-wall (not additive).
+function calcCarpet(row: CarpetRow) {
+  const sqFt = round2(safeNum(row.width) * safeNum(row.length));
+  const sqYd = round2(sqFt / 9);
+  const hasArea = sqYd > 0;
+
+  // Installation: double stick replaces wall-to-wall
+  const installRate  = row.doubleStick ? PRICING.doubleStick : PRICING.installation;
+  const installLabel = row.doubleStick ? "Double Stick Installation" : "Wall-to-Wall Installation";
+  const installTotal = hasArea ? round2(sqYd * installRate) : 0;
+
+  const ripUpTotal = hasArea && row.ripUp ? round2(sqYd * PRICING.ripUp) : 0;
+  const padTotal   = hasArea && row.pad   ? round2(sqYd * PRICING.pad40oz) : 0;
+  const subtotal   = round2(installTotal + ripUpTotal + padTotal);
+
+  return { sqFt, sqYd, hasArea, installRate, installLabel, installTotal, ripUpTotal, padTotal, subtotal };
 }
 
 function CarpetRowEditor({ row, onChange, onRemove, index }: {
@@ -86,15 +103,7 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
   index: number;
 }) {
   const set = (key: keyof CarpetRow) => (val: string | boolean) => onChange({ ...row, [key]: val });
-
-  const handleInstallType = (type: InstallType) => {
-    onChange({ ...row, installType: row.installType === type ? "none" : type });
-  };
-
-  const calc = calcRoom({
-    width: safeNum(row.width), length: safeNum(row.length), qty: 1,
-    installType: row.installType, ripUp: row.ripUp, pad: row.pad, receiveDelivery: false,
-  });
+  const calc = calcCarpet(row);
 
   return (
     <div className="border border-slate-200 rounded-xl p-4 mb-3 bg-slate-50">
@@ -111,7 +120,7 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
       </div>
 
       {/* Auto-calculated SY */}
-      {calc.sqYd > 0 && (
+      {calc.hasArea && (
         <div className="flex gap-3 mb-4">
           <CalcBadge label="Sq Ft" value={`${calc.sqFt}`} />
           <CalcBadge label="Sq Yd" value={`${calc.sqYd}`} />
@@ -120,19 +129,18 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
 
       {/* Services */}
       <div className="space-y-1 mb-3">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Select Services</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Services</p>
 
-        {/* Wall-to-Wall Installation — default selected, mutually exclusive with Double Stick */}
-        <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
-          <input type="checkbox"
-            checked={row.installType === "wallToWall"}
-            onChange={() => handleInstallType("wallToWall")}
-            className="w-4 h-4 accent-navy rounded" />
-          <span className="flex-1 text-sm text-slate-700">Wall-to-Wall Installation</span>
+        {/* Wall-to-Wall — AUTOMATIC, always on when area > 0, shown as locked unless double stick chosen */}
+        <div className={`flex items-center gap-3 p-2.5 rounded-lg border ${row.doubleStick ? "opacity-40 border-transparent" : "bg-white border-slate-200"}`}>
+          <div className="w-4 h-4 rounded border-2 border-navy bg-navy flex items-center justify-center flex-shrink-0">
+            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <span className="flex-1 text-sm text-slate-700 font-medium">Wall-to-Wall Installation <span className="text-xs text-slate-400 font-normal">(automatic)</span></span>
           <span className="text-xs font-mono font-semibold text-navy">
-            {row.installType === "wallToWall" && calc.sqYd > 0 ? fmt(calc.installTotal) : `${PRICING.installation}/SY`}
+            {calc.hasArea && !row.doubleStick ? fmt(calc.installTotal) : `${PRICING.installation}/SY`}
           </span>
-        </label>
+        </div>
 
         {/* Rip Up */}
         <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
@@ -140,19 +148,20 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
             className="w-4 h-4 accent-navy rounded" />
           <span className="flex-1 text-sm text-slate-700">Rip Up &amp; Disposal of Old Carpet</span>
           <span className="text-xs font-mono font-semibold text-navy">
-            {row.ripUp && calc.sqYd > 0 ? fmt(calc.ripUpTotal) : `${PRICING.ripUp}/SY`}
+            {row.ripUp && calc.hasArea ? fmt(calc.ripUpTotal) : `${PRICING.ripUp}/SY`}
           </span>
         </label>
 
-        {/* Double Stick — mutually exclusive with Wall-to-Wall */}
+        {/* Double Stick — replaces wall-to-wall when checked */}
         <label className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-white cursor-pointer border border-transparent hover:border-slate-200 transition-all">
-          <input type="checkbox"
-            checked={row.installType === "doubleStick"}
-            onChange={() => handleInstallType("doubleStick")}
+          <input type="checkbox" checked={row.doubleStick} onChange={e => set("doubleStick")(e.target.checked)}
             className="w-4 h-4 accent-navy rounded" />
-          <span className="flex-1 text-sm text-slate-700">Double Stick Installation</span>
+          <span className="flex-1 text-sm text-slate-700">
+            Double Stick Installation
+            <span className="text-xs text-slate-400 ml-1">(replaces W2W)</span>
+          </span>
           <span className="text-xs font-mono font-semibold text-navy">
-            {row.installType === "doubleStick" && calc.sqYd > 0 ? fmt(calc.installTotal) : `${PRICING.doubleStick}/SY`}
+            {row.doubleStick && calc.hasArea ? fmt(calc.installTotal) : `${PRICING.doubleStick}/SY`}
           </span>
         </label>
 
@@ -162,7 +171,7 @@ function CarpetRowEditor({ row, onChange, onRemove, index }: {
             className="w-4 h-4 accent-navy rounded" />
           <span className="flex-1 text-sm text-slate-700">40 oz Pad</span>
           <span className="text-xs font-mono font-semibold text-navy">
-            {row.pad && calc.sqYd > 0 ? fmt(calc.padTotal) : `${PRICING.pad40oz}/SY`}
+            {row.pad && calc.hasArea ? fmt(calc.padTotal) : `${PRICING.pad40oz}/SY`}
           </span>
         </label>
       </div>
@@ -201,8 +210,7 @@ export default function EstimatorForm() {
   // ── Carpet Installation areas ──────────────────────────────
   const [carpets, setCarpets] = useState<CarpetRow[]>([]);
   const addCarpet = () => setCarpets(prev => [...prev, {
-    id: Date.now(), width: "", length: "",
-    installType: "wallToWall" as InstallType, ripUp: false, pad: false,
+    id: Date.now(), width: "", length: "", doubleStick: false, ripUp: false, pad: false,
   }]);
   const removeCarpet = (id: number) => setCarpets(prev => prev.filter(r => r.id !== id));
   const updateCarpet = (id: number, r: CarpetRow) => setCarpets(prev => prev.map(x => x.id === id ? r : x));
@@ -248,10 +256,7 @@ export default function EstimatorForm() {
     setTravel(prev => ({ ...prev, [key]: val }));
 
   // ── Computed values ────────────────────────────────────────
-  const carpetCalcs = carpets.map(r => calcRoom({
-    width: safeNum(r.width), length: safeNum(r.length), qty: 1,
-    installType: r.installType, ripUp: r.ripUp, pad: r.pad, receiveDelivery: false,
-  }));
+  const carpetCalcs = carpets.map(r => calcCarpet(r));
   const stairCalc  = calcStairs(stairs);
   const rugCalc    = calcRug(rug);
   const seamTotal  = calcSeaming(safeNum(seamingLF));
